@@ -49,21 +49,34 @@
 <section id="tutorial" class="screen"><div class="panel"><h1>📘 Tutorial</h1><div id="tut1"><h2>1. How to Play</h2><p id="tutSummary" class="sub"></p><div id="tutorialDemo" class="tutorial-demo"></div><div id="demoCaption" class="demo-caption">Watch the example…</div><div id="demoDialog" class="demo-dialog hidden"><b>🎤 What color is this?</b><div id="demoSwatch" class="demo-swatch"></div><div id="demoAnswer"></div></div><button id="playDemoBtn" class="btn primary wide" onclick="playTutorialDemo()">▶ Play Demo Again</button><p>Find the color whose <b>written name is wrong</b>. Select it, then say its real color. A correct answer earns <b>+1</b>.</p><button class="btn primary wide" onclick="tutPage(2)">Next</button><button class="btn secondary wide" onclick="closeTutorial()">← Back</button></div><div id="tut2" class="hidden"><h2>2. Learn &amp; Practise Colors</h2><p id="tutPracticeSummary" class="sub"></p><div id="learnColors" class="colors-list"></div><p class="sub">The first color is pronounced automatically. Tap any other color to hear it again.</p><button class="btn secondary wide" onclick="tutPage(1)">Previous</button><button class="btn secondary wide" onclick="closeTutorial()">← Back</button></div></div></section>
 <div id="speakOverlay" class="overlay"><div class="dialog"><div id="answerSwatch" class="swatch"></div><div class="mic">🎙️</div><p id="listenText">Say the color name…</p><div id="feedback" class="feedback"></div><button id="retryMic" class="btn secondary wide hidden" onclick="listenForAnswer()">Try microphone again</button><div id="manualFallback" class="hidden"><p>Manual check:</p><div class="row manual-actions"><button class="btn primary" onclick="manualJudge(true)">✓ Correct</button><button class="btn danger" onclick="manualJudge(false)">✕ Wrong</button></div></div></div></div>
 <script>
-const VERSION=36;
+const VERSION=37;
 const COLORS={easy:[['Red','#e53935'],['Blue','#1e88e5'],['Green','#43a047'],['Yellow','#fdd835'],['Black','#202124'],['White','#f7f7f7']],medium:[['Red','#e53935'],['Blue','#1e88e5'],['Green','#43a047'],['Yellow','#fdd835'],['Black','#202124'],['White','#f7f7f7'],['Orange','#fb8c00'],['Purple','#8e24aa'],['Pink','#ec407a'],['Brown','#795548'],['Gray','#80868b'],['Cyan','#00acc1']],hard:[['Red','#e53935'],['Blue','#1e88e5'],['Green','#43a047'],['Yellow','#fdd835'],['Black','#202124'],['White','#f7f7f7'],['Orange','#fb8c00'],['Purple','#8e24aa'],['Pink','#ec407a'],['Brown','#795548'],['Gray','#80868b'],['Turquoise','#26a69a'],['Navy','#152b5b'],['Beige','#d8c6a5'],['Maroon','#7b1f36'],['Violet','#7e57c2'],['Lime','#8bc34a'],['Gold','#d4af37'],['Silver','#a7a9ac'],['Coral','#ff7043']]};
 let speechAttempt=0;let mode='local',players=[],pi=0,score=0,rounds=0,correct=0,wrong=0,endAt=0,gameStartAt=0,timer=null,round=null,replayed=false,roundNo=0,seed=1,settings={},roundSerial=0,roundStartTimeout=null,roundPaceElapsed=0;let peer=null,conns=[],hostConn=null,isHost=false,roomPlayers=[],onlineFinished={};
 function show(id){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active')}
 function chooseMode(m){mode=m;show('setup');document.getElementById('setupTitle').textContent=m==='local'?'📱 Local Game':'🌐 Online Game';document.getElementById('localFields').classList.toggle('hidden',m!=='local');document.getElementById('onlineFields').classList.toggle('hidden',m!=='online');document.getElementById('startBtn').classList.toggle('hidden',m==='online');renderNames()}
 function renderNames(){let n=+document.getElementById('playerCount').value,old=[...document.querySelectorAll('.pname')].map(x=>x.value),saved=[];try{saved=JSON.parse(localStorage.getItem('colorDetectivePlayerNames')||'[]')}catch(e){}let out='';for(let i=0;i<n;i++){let v=old[i]||saved[i]||`Player ${i+1}`;out+=`<div class="field"><label>Player ${i+1}</label><input class="pname" value="${esc(v)}"></div>`}document.getElementById('names').innerHTML=out}document.getElementById('playerCount').onchange=renderNames;
 function readSettings(){return {difficulty:difficulty.value,size:+size.value,duration:+duration.value}}
-function startConfiguredGame(){settings=readSettings();players=[...document.querySelectorAll('.pname')].map((x,i)=>({name:x.value.trim()||`Player ${i+1}`}));try{localStorage.setItem('colorDetectivePlayerNames',JSON.stringify(players.map(x=>x.name)))}catch(e){}seed=(Date.now()>>>0);pi=0;showTransition()}
+function buildSelectedColors(ts){
+  const pool=COLORS[ts.difficulty]||COLORS.medium;
+  const n=Math.min(+ts.size,pool.length);
+  // The selected game vocabulary is level-appropriate and limited to the chosen color count.
+  // Keep this palette stable for the whole game so Tutorial and gameplay teach the same colors.
+  return pool.slice(0,n).map(c=>[c[0],c[1]]);
+}
+function ensureSelectedColors(ts=settings){
+  if(!ts)return [];
+  const expected=Math.min(+ts.size,(COLORS[ts.difficulty]||[]).length);
+  if(!Array.isArray(ts.selectedColors)||ts.selectedColors.length!==expected){ts.selectedColors=buildSelectedColors(ts)}
+  return ts.selectedColors;
+}
+function startConfiguredGame(){settings=readSettings();ensureSelectedColors(settings);players=[...document.querySelectorAll('.pname')].map((x,i)=>({name:x.value.trim()||`Player ${i+1}`}));try{localStorage.setItem('colorDetectivePlayerNames',JSON.stringify(players.map(x=>x.name)))}catch(e){}seed=(Date.now()>>>0);pi=0;showTransition()}
 function showTransition(){turnTitle.textContent=`${players[pi].name}, get ready!`;show('transition')}
 function beginPlayer(){score=rounds=correct=wrong=roundNo=0;seed=(settings.baseSeed??seed);document.getElementById('who').textContent=players[pi].name;scoreUI();show('game');gameStartAt=performance.now();endAt=gameStartAt+settings.duration*1000;clearInterval(timer);timer=setInterval(tick,100);nextRound()}
 function tick(){let left=Math.max(0,Math.ceil((endAt-performance.now())/1000));time.textContent=left;if(performance.now()>=endAt)finishPlayer()}
 function scoreUI(){document.getElementById('score').textContent=score}
 function rng(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
 function shuffled(a){a=[...a];for(let i=a.length-1;i>0;i--){let j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function makeRound(){let pool=COLORS[settings.difficulty],n=Math.min(settings.size,pool.length),cards=shuffled(pool).slice(0,n),bad=Math.floor(rng()*n),wrongNames=pool.filter(x=>x[0]!==cards[bad][0]),said=wrongNames[Math.floor(rng()*wrongNames.length)][0];return {cards,bad,said,index:0,active:-1,stopped:false}}
+function makeRound(){let pool=ensureSelectedColors(settings),n=pool.length,cards=shuffled(pool).slice(0,n),bad=Math.floor(rng()*n),wrongNames=pool.filter(x=>x[0]!==cards[bad][0]),said=wrongNames[Math.floor(rng()*wrongNames.length)][0];return {cards,bad,said,index:0,active:-1,stopped:false}}
 function nextRound(){if(performance.now()>=endAt)return finishPlayer();rounds++;roundNo++;roundSerial++;replayed=false;round=makeRound();renderBoard();status.className='status';status.textContent=`Round ${roundNo} — find the wrong written color name.`}
 function renderBoard(){board.innerHTML='';board.classList.toggle('many',round.cards.length>=8);board.classList.toggle('very-many',round.cards.length>=11);board.style.gridTemplateColumns=round.cards.length<=6?'repeat(2,1fr)':'repeat(3,1fr)';round.cards.forEach((c,i)=>{let b=document.createElement('button');b.className='color-card ready';b.style.background=c[1];let written=i===round.bad?round.said:c[0];b.setAttribute('aria-label',`${written} written on color card ${i+1}`);let label=document.createElement('span');label.className='card-name'+(written==='Turquoise'?' turquoise-name':'');label.textContent=written;if(c[0]==='Black')label.style.color='#fff';b.appendChild(label);b.onclick=()=>pick(i);board.appendChild(b)})}
 function say(text,onend){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=.82;u.onend=()=>onend&&onend();u.onerror=()=>onend&&onend();speechSynthesis.speak(u)}
@@ -174,20 +187,25 @@ function showResults(arr){let sorted=[...arr].sort((a,b)=>b.score-a.score||b.rou
 function playAgainSameSettings(){speechSynthesis.cancel();if(mode==='local'){startConfiguredGame();return}if(isHost){startOnlineHost();return}winner.textContent='Waiting for the host to restart the game…'}
 function returnToMainMenu(){roundSerial++;clearTimeout(roundStartTimeout);speechSynthesis.cancel();if(timer){clearInterval(timer);timer=null}if(window._activeRecognition){try{window._activeRecognition.abort()}catch(e){}window._activeRecognition=null}speakOverlay.classList.remove('show');round=null;score=rounds=correct=wrong=roundNo=0;scoreUI();show('home')}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-let tutorialReturn='setup',tutorialColors=[],tutorialDemoRun=0,tutorialPageNow=1;
-function tutorialPool(useGameSettings=false){let ts=useGameSettings&&settings&&settings.difficulty?settings:readSettings(),pool=COLORS[ts.difficulty];return {ts,colors:[...pool].slice(0,Math.min(ts.size,pool.length))}}
+let tutorialReturn='setup',tutorialColors=[],tutorialDemoRun=0,tutorialPageNow=1,tutorialPauseState=null;
+function tutorialPool(useGameSettings=false){let ts=useGameSettings&&settings&&settings.difficulty?settings:readSettings();let colors=useGameSettings?ensureSelectedColors(ts):buildSelectedColors(ts);return {ts,colors:colors.map(c=>[c[0],c[1]])}}
 function prepareTutorial(useGameSettings=false){
   let x=tutorialPool(useGameSettings); tutorialColors=x.colors;
-  tutSummary.textContent=`This demonstration uses colors from the ${x.ts.difficulty} difficulty level.`;
-  tutPracticeSummary.textContent=`These are the ${tutorialColors.length} colors for this game.`;
+  tutSummary.textContent=`This demonstration matches your ${x.ts.difficulty} level and ${tutorialColors.length}-color game.`;
+  tutPracticeSummary.textContent=`These are the exact ${tutorialColors.length} colors used for this ${x.ts.difficulty} game.`;
   renderTutorialDemo(); renderTutorialPractice(); show('tutorial'); tutPage(1);
 }
 function openTutorial(){tutorialReturn='setup';prepareTutorial(false)}
 function openTutorialFromGame(){
-  tutorialReturn='game'; roundSerial++; clearTimeout(roundStartTimeout); speechSynthesis.cancel();
+  tutorialReturn='game';
+  tutorialPauseState={
+    remainingMs:Math.max(0,endAt-performance.now()),
+    roundStopped:round?round.stopped:false
+  };
+  roundSerial++; clearTimeout(roundStartTimeout); speechSynthesis.cancel();
   if(timer){clearInterval(timer);timer=null}
   if(window._activeRecognition){try{window._activeRecognition.abort()}catch(e){}window._activeRecognition=null}
-  if(round)round.stopped=true; speakOverlay.classList.remove('show');
+  speakOverlay.classList.remove('show');
   prepareTutorial(true);
 }
 function renderTutorialDemo(){
@@ -232,7 +250,21 @@ function playTutorialColors(){
   }
   next();
 }
-function closeTutorial(){tutorialDemoRun++;speechSynthesis.cancel();highlightTutorialColor(-1,false);if(tutorialReturn==='game'){restartGameSameSettings();return}show(tutorialReturn)}
+function closeTutorial(){
+  tutorialDemoRun++;speechSynthesis.cancel();highlightTutorialColor(-1,false);
+  if(tutorialReturn==='game'){
+    const paused=tutorialPauseState;tutorialPauseState=null;
+    show('game');
+    if(paused){
+      endAt=performance.now()+paused.remainingMs;
+      if(round)round.stopped=paused.roundStopped;
+      time.textContent=Math.max(0,Math.ceil(paused.remainingMs/1000));
+      clearInterval(timer);timer=setInterval(tick,100);
+    }
+    return;
+  }
+  show(tutorialReturn)
+}
 function tutPage(n){
   tutorialPageNow=n;tutorialDemoRun++;speechSynthesis.cancel();tut1.classList.toggle('hidden',n!==1);tut2.classList.toggle('hidden',n!==2);
   if(n===1){renderTutorialDemo();setTimeout(playTutorialDemo,250)}
@@ -245,7 +277,7 @@ function joinRoom(){let name=onlineName.value.trim();let c=roomCode.value.trim()
 function hostData(conn,d){if(d.type==='join'){if(roomPlayers.includes(d.name)){conn.send({type:'reject',msg:'That name is already used.'});return}conn.playerName=d.name;roomPlayers.push(d.name);broadcast({type:'lobby',players:roomPlayers});roomInfo.textContent=`Room ${roomCode.value}: ${roomPlayers.join(', ')}`}if(d.type==='finish'){onlineFinished[d.result.name]=d.result;checkOnlineDone()}}
 function guestData(d){if(d.type==='lobby')roomInfo.textContent='Players: '+d.players.join(', ');if(d.type==='reject')alert(d.msg);if(d.type==='start'){settings=d.settings;settings.baseSeed=d.seed;players=[{name:onlineName.value.trim()}];pi=0;show('transition');turnTitle.textContent=`${players[0].name}, get ready!`;window._onlineTotal=d.players}if(d.type==='results')showResults(d.results)}
 function broadcast(d){conns.forEach(c=>{if(c.open)c.send(d)})}
-function startOnlineHost(){settings=readSettings();let name=onlineName.value.trim()||'Host';seed=(Date.now()>>>0);settings.baseSeed=seed;onlineFinished={};broadcast({type:'start',settings,seed,players:roomPlayers.length});players=[{name}];pi=0;window._onlineTotal=roomPlayers.length;show('transition');turnTitle.textContent=`${name}, get ready!`}
+function startOnlineHost(){settings=readSettings();ensureSelectedColors(settings);let name=onlineName.value.trim()||'Host';seed=(Date.now()>>>0);settings.baseSeed=seed;onlineFinished={};broadcast({type:'start',settings,seed,players:roomPlayers.length});players=[{name}];pi=0;window._onlineTotal=roomPlayers.length;show('transition');turnTitle.textContent=`${name}, get ready!`}
 function sendFinish(res){if(isHost){onlineFinished[res.name]=res;checkOnlineDone()}else{hostConn.send({type:'finish',result:res});status.textContent='Finished! Waiting for other players…';show('game')}}
 function checkOnlineDone(){if(Object.keys(onlineFinished).length>=window._onlineTotal){let results=Object.values(onlineFinished);broadcast({type:'results',results});showResults(results)}else{status.textContent='Finished! Waiting for other players…'}}
 </script></body></html>
